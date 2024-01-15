@@ -1,118 +1,182 @@
-// Base class representing a generic Dish
-class Dish {
-    private String name;
-    private double price;
+package proj3;
 
-    public Dish(String name, double price) {
-        this.name = name;
-        this.price = price;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.sql.*;
+
+public class RestaurantManagementSystem extends JFrame {
+
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/restaurant";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "Likitha@1234";
+
+    private JTextArea displayArea;
+
+    public RestaurantManagementSystem() {
+        super("Restaurant Management System");
+
+        displayArea = new JTextArea(10, 30);
+        displayArea.setEditable(false);
+
+        JButton viewMenuButton = new JButton("View Menu");
+        viewMenuButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                displayMenu();
+            }
+        });
+
+        JButton placeOrderButton = new JButton("Place Order");
+        placeOrderButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                promptOrder();
+            }
+        });
+
+        JButton viewOrdersButton = new JButton("View Orders");
+        viewOrdersButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                displayOrders();
+            }
+        });
+
+        JPanel panel = new JPanel();
+        panel.add(viewMenuButton);
+        panel.add(placeOrderButton);
+        panel.add(viewOrdersButton);
+
+        add(displayArea, BorderLayout.CENTER);
+        add(panel, BorderLayout.SOUTH);
+
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        pack();
+        setLocationRelativeTo(null);
     }
 
-    public void display() {
-        System.out.println("Dish: " + name);
-        System.out.println("Price: $" + price);
-    }
-}
+    private void displayMenu() {
+        try (Connection con = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery("SELECT * FROM menu")) {
 
-// Subclass representing an Appetizer, inheriting from Dish
-class Appetizer extends Dish {
-    private boolean isFried;
+            displayArea.setText("Menu:\n");
+            while (rs.next()) {
+                displayArea.append(rs.getInt("id") + "\t" + rs.getString("item") + "\t" + rs.getDouble("price") + "\n");
+            }
 
-    public Appetizer(String name, double price, boolean isFried) {
-        super(name, price);
-        this.isFried = isFried;
-    }
-
-    @Override
-    public void display() {
-        super.display();
-        System.out.println("Type: Appetizer");
-        System.out.println("Fried: " + isFried);
-    }
-}
-
-// Subclass representing a Main Course, inheriting from Dish
-class MainCourse extends Dish {
-    private boolean isVegetarian;
-
-    public MainCourse(String name, double price, boolean isVegetarian) {
-        super(name, price);
-        this.isVegetarian = isVegetarian;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            displayArea.setText("Error: " + e.getMessage());
+        }
     }
 
-    @Override
-    public void display() {
-        super.display();
-        System.out.println("Type: Main Course");
-        System.out.println("Vegetarian: " + isVegetarian);
-    }
-}
+    private void promptOrder() {
+        JFrame orderFrame = new JFrame("Place Order");
+        orderFrame.setLayout(new GridLayout(3, 2));
 
-// Abstract class representing a special of the day
-abstract class Special {
-    private String name;
+        JLabel quantityLabel = new JLabel("Enter quantity:");
+        JTextField quantityField = new JTextField();
 
-    public Special(String name) {
-        this.name = name;
-    }
+        JLabel itemLabel = new JLabel("Select item:");
+        JComboBox<String> itemComboBox = new JComboBox<>();
+        // Populate combo box with menu items
+        populateItemComboBox(itemComboBox);
 
-    // Abstract method to be implemented by subclasses
-    public abstract void displaySpecial();
+        JButton confirmButton = new JButton("Confirm Order");
+        confirmButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int quantity = Integer.parseInt(quantityField.getText());
+                String selectedItem = (String) itemComboBox.getSelectedItem();
+                placeOrderInDatabase(quantity, selectedItem);
+                displayOrder(quantity, selectedItem);
+                orderFrame.dispose();
+            }
+        });
 
-    public String getName() {
-        return name;
-    }
-}
+        orderFrame.add(quantityLabel);
+        orderFrame.add(quantityField);
+        orderFrame.add(itemLabel);
+        orderFrame.add(itemComboBox);
+        orderFrame.add(confirmButton);
 
-// Concrete subclass of Special
-class DailySpecial extends Special {
-    private String chef;
-
-    public DailySpecial(String name, String chef) {
-        super(name);
-        this.chef = chef;
-    }
-
-    @Override
-    public void displaySpecial() {
-        System.out.println("Special of the Day: " + getName());
-        System.out.println("Chef: " + chef);
-    }
-}
-
-// Final class, cannot be subclassed
-final class Dessert extends Dish {
-    private boolean isFrozen;
-
-    public Dessert(String name, double price, boolean isFrozen) {
-        super(name, price);
-        this.isFrozen = isFrozen;
+        orderFrame.setSize(300, 150);
+        orderFrame.setLocationRelativeTo(null);
+        orderFrame.setVisible(true);
     }
 
-    @Override
-    public void display() {
-        super.display();
-        System.out.println("Type: Dessert");
-        System.out.println("Frozen: " + isFrozen);
-    }
-}
+    private void populateItemComboBox(JComboBox<String> comboBox) {
+        try (Connection con = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery("SELECT item FROM menu")) {
 
-public class RestaurantManagementSystem {
+            while (rs.next()) {
+                comboBox.addItem(rs.getString("item"));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            displayArea.setText("Error: " + e.getMessage());
+        }
+    }
+
+    private void placeOrderInDatabase(int quantity, String selectedItem) {
+        try (Connection con = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement pst = con.prepareStatement("INSERT INTO orders (item, quantity) VALUES (?, ?)")) {
+
+            pst.setString(1, selectedItem);
+            pst.setInt(2, quantity);
+
+            pst.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            displayArea.setText("Error placing order in database: " + e.getMessage());
+        }
+    }
+
+    private void displayOrder(int quantity, String selectedItem) {
+        displayArea.append("\nOrder Placed:\n");
+        displayArea.append("Quantity: " + quantity + "\tItem: " + selectedItem + "\n");
+    }
+
+    private void displayOrders() {
+        JFrame ordersFrame = new JFrame("Placed Orders");
+        JTextArea ordersTextArea = new JTextArea(10, 30);
+        ordersTextArea.setEditable(false);
+
+        try (Connection con = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery("SELECT * FROM orders")) {
+
+            ordersTextArea.setText("Placed Orders:\n");
+            while (rs.next()) {
+                ordersTextArea.append("Order ID: " + rs.getInt("order_id") + "\tItem: " + rs.getString("item")
+                        + "\tQuantity: " + rs.getInt("quantity") + "\n");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            ordersTextArea.setText("Error retrieving orders: " + e.getMessage());
+        }
+
+        JScrollPane scrollPane = new JScrollPane(ordersTextArea);
+        ordersFrame.add(scrollPane);
+
+        ordersFrame.setSize(400, 300);
+        ordersFrame.setLocationRelativeTo(null);
+        ordersFrame.setVisible(true);
+    }
+
     public static void main(String[] args) {
-        // Creating instances of the classes
-        Appetizer appetizer = new Appetizer("Spring Rolls", 8.99, true);
-        MainCourse mainCourse = new MainCourse("Chicken Alfredo", 15.99, false);
-        Dessert dessert = new Dessert("Chocolate Cake", 6.99, true);
-        DailySpecial dailySpecial = new DailySpecial("Grilled Salmon", "Chef Likitha Yadav G");
-
-        // Displaying information about the dishes
-        System.out.println("Appetizer:");
-        appetizer.display();
-        System.out.println("\nMain Course:");
-        mainCourse.display();
-        System.out.println("\nDessert:");
-        dessert.display();
-        System.out.println("\nDaily Special:");
-        dailySpecial.displaySpecial();
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                new RestaurantManagementSystem().setVisible(true);
+            }
+        });
     }
 }
